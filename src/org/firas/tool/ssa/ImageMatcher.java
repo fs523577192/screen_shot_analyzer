@@ -14,10 +14,10 @@ import javax.imageio.ImageIO;
  */
 class ImageMatcher {
     static void match(final String bigImagePath, final String imagePatternPath) throws Exception {
-        match(bigImagePath, imagePatternPath, 0, 0);
+        match(bigImagePath, imagePatternPath, 0, 0, 9999, 9999);
     }
     static void match(final String bigImagePath, final String imagePatternPath,
-            final int x0, final int y0) throws Exception {
+            final int x0, final int y0, final int x1, final int y1) throws Exception {
         final File bigImageFile = new File(bigImagePath);
         if ( ! bigImageFile.isFile() || ! bigImageFile.canRead() ) {
             throw new IllegalArgumentException("Cannot read " + bigImagePath);
@@ -38,19 +38,20 @@ class ImageMatcher {
 
         try {
             executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-            doMatch(bigImage, imagePattern, x0, y0);
+            doMatch(bigImage, imagePattern, x0, y0,
+                    Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
         } finally {
             executorService.shutdown();
         }
     }
 
     private static void doMatch(final BufferedImage bigImage, final BufferedImage imagePattern,
-            final int x0, final int y0) throws Exception {
+            final int x0, final int y0, final int x1, final int y1) throws Exception {
         Future[] futures = new Future[Runtime.getRuntime().availableProcessors()];
         try (PrintWriter writer = new PrintWriter("log.csv")) {
             final long threshold = imagePattern.getWidth() * imagePattern.getHeight() * 16;
-            for (int x = x0; x <= bigImage.getWidth() - imagePattern.getWidth(); x += 1) {
-                for (int y = y0; y <= bigImage.getHeight() - imagePattern.getHeight(); y += futures.length) {
+            for (int x = x0; x <= x1 - imagePattern.getWidth(); x += 1) {
+                for (int y = y0; y <= y1 - imagePattern.getHeight(); y += futures.length) {
                     for (int i = 0; i < futures.length; i += 1) {
                         final int xx = x, yy = y + i;
                         futures[i] = executorService.submit(() -> {
