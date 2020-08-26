@@ -13,11 +13,11 @@ import javax.imageio.ImageIO;
  * @author Wu Yuping
  */
 class ImageMatcher {
-    static void match(final String bigImagePath, final String imagePatternPath) throws Exception {
-        match(bigImagePath, imagePatternPath, 0, 0, 9999, 9999);
+    static void match(final String bigImagePath, final String imagePatternPath, final boolean revert) throws Exception {
+        match(bigImagePath, imagePatternPath, 0, 0, 9999, 9999, revert);
     }
     static void match(final String bigImagePath, final String imagePatternPath,
-            final int x0, final int y0, final int x1, final int y1) throws Exception {
+            final int x0, final int y0, final int x1, final int y1, final boolean revert) throws Exception {
         final File bigImageFile = new File(bigImagePath);
         if ( ! bigImageFile.isFile() || ! bigImageFile.canRead() ) {
             throw new IllegalArgumentException("Cannot read " + bigImagePath);
@@ -38,8 +38,13 @@ class ImageMatcher {
 
         try {
             executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-            doMatch(bigImage, imagePattern, x0, y0,
-                    Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
+            if (revert) {
+                doRevertMatch(bigImage, imagePattern, x0, y0,
+                        Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
+            } else {
+                doMatch(bigImage, imagePattern, x0, y0,
+                        Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
+            }
         } finally {
             executorService.shutdown();
         }
@@ -52,6 +57,36 @@ class ImageMatcher {
             final long threshold = imagePattern.getWidth() * imagePattern.getHeight() * 16;
             for (int x = x0; x <= x1 - imagePattern.getWidth(); x += 1) {
                 for (int y = y0; y <= y1 - imagePattern.getHeight(); y += futures.length) {
+                    for (int i = 0; i < futures.length; i += 1) {
+                        final int xx = x, yy = y + i;
+                        futures[i] = executorService.submit(() -> {
+                            long diff = partMatch(bigImage, imagePattern, xx, 0, yy, 0,
+                                    imagePattern.getWidth(), imagePattern.getHeight(), threshold);
+                            writer.println(xx + "," + yy + "," + diff);
+                            if (diff < threshold) {
+                                System.out.println("Matched: " + xx + " " + yy + " " + diff);
+                                return true;
+                            }
+                            return false;
+                        });
+                    }
+                    for (Future future : futures) {
+                        if ( Boolean.TRUE.equals(future.get()) ) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void doRevertMatch(final BufferedImage bigImage, final BufferedImage imagePattern,
+            final int x0, final int y0, final int x1, final int y1) throws Exception {
+        Future[] futures = new Future[Runtime.getRuntime().availableProcessors()];
+        try (PrintWriter writer = new PrintWriter("log.csv")) {
+            final long threshold = imagePattern.getWidth() * imagePattern.getHeight() * 16;
+            for (int x = x0; x <= x1 - imagePattern.getWidth(); x += 1) {
+                for (int y = y1 - imagePattern.getHeight(); y >= y0; y -= futures.length) {
                     for (int i = 0; i < futures.length; i += 1) {
                         final int xx = x, yy = y + i;
                         futures[i] = executorService.submit(() -> {
