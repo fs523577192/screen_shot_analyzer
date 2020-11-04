@@ -3,7 +3,9 @@ package org.firas.tool.ssa;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -13,11 +15,14 @@ import javax.imageio.ImageIO;
  * @author Wu Yuping
  */
 class ImageMatcher {
-    static void match(final String bigImagePath, final String imagePatternPath, final boolean revert) throws Exception {
-        match(bigImagePath, imagePatternPath, 0, 0, 9999, 9999, revert);
+
+    static void match(final PrintWriter writer, final String bigImagePath, final String imagePatternPath, final boolean revert)
+            throws IOException {
+        match(writer, bigImagePath, imagePatternPath, 0, 0, 9999, 9999, revert);
     }
-    static void match(final String bigImagePath, final String imagePatternPath,
-            final int x0, final int y0, final int x1, final int y1, final boolean revert) throws Exception {
+
+    static void match(final PrintWriter writer, final String bigImagePath, final String imagePatternPath,
+            final int x0, final int y0, final int x1, final int y1, final boolean revert) throws IOException {
         final File bigImageFile = new File(bigImagePath);
         if ( ! bigImageFile.isFile() || ! bigImageFile.canRead() ) {
             throw new IllegalArgumentException("Cannot read " + bigImagePath);
@@ -39,10 +44,10 @@ class ImageMatcher {
         try {
             executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
             if (revert) {
-                doRevertMatch(bigImage, imagePattern, x0, y0,
+                doRevertMatch(writer, bigImage, imagePattern, x0, y0,
                         Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
             } else {
-                doMatch(bigImage, imagePattern, x0, y0,
+                doMatch(writer, bigImage, imagePattern, x0, y0,
                         Math.min(x1, bigImage.getWidth()), Math.min(y1, bigImage.getHeight()));
             }
         } finally {
@@ -50,8 +55,8 @@ class ImageMatcher {
         }
     }
 
-    private static void doMatch(final BufferedImage bigImage, final BufferedImage imagePattern,
-            final int x0, final int y0, final int x1, final int y1) throws Exception {
+    private static void doMatch(final PrintWriter out, final BufferedImage bigImage, final BufferedImage imagePattern,
+            final int x0, final int y0, final int x1, final int y1) throws IOException {
         Future[] futures = new Future[Runtime.getRuntime().availableProcessors()];
         try (PrintWriter writer = new PrintWriter("log.csv")) {
             final long threshold = imagePattern.getWidth() * imagePattern.getHeight() * 16;
@@ -64,24 +69,28 @@ class ImageMatcher {
                                     imagePattern.getWidth(), imagePattern.getHeight(), threshold);
                             writer.println(xx + "," + yy + "," + diff);
                             if (diff < threshold) {
-                                System.out.println("Matched: " + xx + " " + yy + " " + diff);
+                                out.println("Matched: " + xx + " " + yy + " " + diff);
                                 return true;
                             }
                             return false;
                         });
                     }
                     for (Future future : futures) {
-                        if ( Boolean.TRUE.equals(future.get()) ) {
-                            return;
-                        }
+						try {
+                            if ( Boolean.TRUE.equals(future.get()) ) {
+                                return;
+                            }
+						} catch (final InterruptedException | ExecutionException ex) {
+							throw new RuntimeException(ex);
+						}
                     }
                 }
             }
         }
     }
 
-    private static void doRevertMatch(final BufferedImage bigImage, final BufferedImage imagePattern,
-            final int x0, final int y0, final int x1, final int y1) throws Exception {
+    private static void doRevertMatch(final PrintWriter out, final BufferedImage bigImage, final BufferedImage imagePattern,
+            final int x0, final int y0, final int x1, final int y1) throws IOException {
         Future[] futures = new Future[Runtime.getRuntime().availableProcessors()];
         try (PrintWriter writer = new PrintWriter("log.csv")) {
             final long threshold = imagePattern.getWidth() * imagePattern.getHeight() * 16;
@@ -94,16 +103,20 @@ class ImageMatcher {
                                     imagePattern.getWidth(), imagePattern.getHeight(), threshold);
                             writer.println(xx + "," + yy + "," + diff);
                             if (diff < threshold) {
-                                System.out.println("Matched: " + xx + " " + yy + " " + diff);
+                                out.println("Matched: " + xx + " " + yy + " " + diff);
                                 return true;
                             }
                             return false;
                         });
                     }
                     for (Future future : futures) {
-                        if ( Boolean.TRUE.equals(future.get()) ) {
-                            return;
-                        }
+                        try {
+                            if ( Boolean.TRUE.equals(future.get()) ) {
+                                return;
+                            }
+						} catch (final InterruptedException | ExecutionException ex) {
+							throw new RuntimeException(ex);
+						}
                     }
                 }
             }

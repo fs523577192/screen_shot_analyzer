@@ -4,6 +4,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -13,7 +14,7 @@ import javax.imageio.stream.FileImageOutputStream;
 
 class BlackWhite {
 
-    static void process(String sourcePath, String targetPath) throws Exception {
+    static void process(final PrintWriter writer, String sourcePath, String targetPath) throws IOException {
         final File sourceFile = new File(sourcePath);
         if ( ! sourceFile.isFile() || ! sourceFile.canRead() ) {
             throw new IllegalArgumentException("Cannot read " + sourcePath);
@@ -25,7 +26,9 @@ class BlackWhite {
                     sourceImage.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
             try {
                 executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-                doProcess1(sourceImage, targetImage);
+                doProcess1(writer, sourceImage, targetImage);
+            } catch (final ExecutionException | InterruptedException ex) {
+                throw new RuntimeException(ex);
             } finally {
                 executorService.shutdown();
             }
@@ -43,11 +46,11 @@ class BlackWhite {
         }
     }
 
-    private static void doProcess1(final BufferedImage sourceImage, final BufferedImage targetImage)
+    private static void doProcess1(final PrintWriter writer, final BufferedImage sourceImage, final BufferedImage targetImage)
             throws ExecutionException, InterruptedException {
         Future[] futures = new Future[Runtime.getRuntime().availableProcessors()];
         final int dx = (int) Math.ceil(sourceImage.getWidth() * 1.0 / futures.length);
-        System.out.println("Math.ceil(" + sourceImage.getWidth() + " / " + futures.length + ") = " + dx);
+        writer.println("Math.ceil(" + sourceImage.getWidth() + " / " + futures.length + ") = " + dx);
         for (int i = 0; i < futures.length; i += 1) {
             final int j = i;
             futures[i] = executorService.submit(() -> {
